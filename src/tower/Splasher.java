@@ -22,15 +22,15 @@ public class Splasher {
     public static void runSplasher(RobotController rc) throws GameActionException {
         boolean hasBroadcastedThisTurn = false;
 
-        // 0. AUTO-UPGRADE
+        // 0. auto-upgrade jika ada uang dan lewat dekat tower
         Utils.tryUpgradeTowers(rc);
 
-        // 1. INISIALISASI TARGET
+        // 1. inisialisasi target awal (formasi trisula)
         if (exploreTarget == null) {
             initTarget(rc);
         }
 
-        // 2. GREEDY COMBAT
+        // 2. greedy combat: serang tower musuh / robot
         if (rc.getPaint() < 50) {
             Utils.retreatToPaintTower(rc, homeLoc);
             return;
@@ -55,6 +55,7 @@ public class Splasher {
         if (rc.isActionReady()) {
             if (enemies.length > 0) {
                 MapLocation enemyLoc = enemies[0].getLocation();
+                
                 if (rc.canAttack(enemyLoc) && rc.getPaint() >= 100) {
                     rc.attack(enemyLoc);
                 }
@@ -117,43 +118,16 @@ public class Splasher {
 
                 if (bestTarget != null) {
                     rc.attack(bestTarget);
+                    
+                    if (roundNum >= 700) {
+                    } else {
+                    }
                     return; 
                 }
             }
         }
 
-        // 2.5 MARK RESOURCE PATTERN (EARLY GAME)
-        if (rc.getRoundNum() <= 300) {
-            MapLocation myLoc = rc.getLocation();
-            boolean conflict = false;
-            
-            // Periksa area sekitar (Radius 34 mencakup jarak Chebyshev hingga 5 petak)
-            MapInfo[] scanResource = rc.senseNearbyMapInfos(myLoc, 34); 
-            for (MapInfo tile : scanResource) {
-                MapLocation loc = tile.getMapLocation();
-                int dx = Math.abs(loc.x - myLoc.x);
-                int dy = Math.abs(loc.y - myLoc.y);
-                
-                // Mencegah bentrok dengan 5x5 Tower (jarak aman minimal 5 petak)
-                if (tile.hasRuin() && Math.max(dx, dy) <= 4) {
-                    conflict = true;
-                    break;
-                }
-                // Mencegah tumpang tindih dengan mark lain di area 5x5 resource ini
-                if (Math.max(dx, dy) <= 2 && tile.getMark() != PaintType.EMPTY) {
-                    conflict = true;
-                    break;
-                }
-            }
-
-            if (!conflict) {
-                try {
-                    rc.markResourcePattern(myLoc);
-                } catch (Exception e) {} // Hindari error jika cooldown atau syarat game menahan
-            }
-        }
-
-        // 3. BACA RADIO
+        // baca radio (splasher hanya dengar info tower selesai & tower musuh)
         Message[] msgs = rc.readMessages(-1);
         for (Message m : msgs) {
             int msg = m.getBytes();
@@ -170,7 +144,7 @@ public class Splasher {
             }
         }
 
-        // 4. GREEDY RUIN
+        // 3. greedy ruin (pencarian & penguncian target)
         if (targetRuin == null) {
             MapInfo[] nearbyTiles = rc.senseNearbyMapInfos();
             for (MapInfo tile : nearbyTiles) {
@@ -209,7 +183,7 @@ public class Splasher {
             }
         }
 
-        // 5. EKSEKUSI RUIN
+        // 4. eksekusi ruin (pemberian mark)
         if (targetRuin != null) {
             if (rc.getLocation().distanceSquaredTo(targetRuin) > 2) {
                 Utils.moveToTarget(rc, targetRuin);
@@ -285,13 +259,15 @@ public class Splasher {
             return;
         }
 
-        // 6. EKSPLORASI
+        // 5. eksplorasi & formasi
         if (rc.getLocation().distanceSquaredTo(exploreTarget) <= 9) {
             decideNextMoves(rc);
         }
 
         Utils.moveToTarget(rc, exploreTarget);
     }
+
+    // helper methods splasher
 
     private static void initTarget(RobotController rc) {
         int width = rc.getMapWidth();
@@ -313,14 +289,17 @@ public class Splasher {
         } else {
             boolean isWing1 = rng.nextBoolean();
             
+            // Cari tahu koordinat ujung-ujung peta
             int ex = (enemyBaseGuess.x > width / 2) ? width - 1 : 0;
             int ey = (enemyBaseGuess.y > height / 2) ? height - 1 : 0;
             int hx = (homeLoc.x > width / 2) ? width - 1 : 0;
             int hy = (homeLoc.y > height / 2) ? height - 1 : 0;
             
             if (isWing1) {
+                // Sayap 1: Bergerak menyusuri pinggir sumbu Y menuju wilayah musuh
                 exploreTarget = new MapLocation(hx, ey);
             } else {
+                // Sayap 2: Bergerak menyusuri pinggir sumbu X menuju wilayah musuh
                 exploreTarget = new MapLocation(ex, hy);
             }
         }
@@ -328,36 +307,46 @@ public class Splasher {
 
     private static void decideNextMoves(RobotController rc) throws GameActionException {
         boolean isInvaderRole = (rc.getID() % 3 != 0); 
+        
         boolean hasEnoughPaint = rc.getPaint() >= 150; 
+        
         int w = rc.getMapWidth();
         int h = rc.getMapHeight();
 
         if (!enemyBaseDestroyed && rc.canSenseLocation(enemyBaseGuess)) {
             RobotInfo occ = rc.senseRobotAtLocation(enemyBaseGuess);
+            
             if (occ == null || occ.getTeam() != rc.getTeam().opponent() || !occ.getType().isTowerType()) {
                 enemyBaseDestroyed = true;
             }
         }
 
         if (isInvaderRole && hasEnoughPaint) {
+            
             if (!enemyBaseDestroyed) {
                 exploreTarget = enemyBaseGuess;
             } else {
-                int ex = (enemyBaseGuess.x > w / 2) ? w - 1 : 0; 
-                int ey = (enemyBaseGuess.y > h / 2) ? h - 1 : 0; 
-                int hx = (homeLoc.x > w / 2) ? w - 1 : 0; 
+                
+                int ex = (enemyBaseGuess.x > w / 2) ? w - 1 : 0; // Ujung sumbu X musuh
+                int ey = (enemyBaseGuess.y > h / 2) ? h - 1 : 0; // Ujung sumbu Y musuh
+                
+                int hx = (homeLoc.x > w / 2) ? w - 1 : 0; // Ujung sumbu X markas kita
 
                 int sweepChoice = rng.nextInt(3);
                 
                 if (sweepChoice == 0) {
                     exploreTarget = new MapLocation(ex, ey);
+                    
                 } else if (sweepChoice == 1) {
                     exploreTarget = new MapLocation(hx, ey);
+                    
                 } else {
                     exploreTarget = new MapLocation(ex, h / 2);
                 }
             }
+            
         } else {
+
             int midX = (homeLoc.x + (w / 2)) / 2;
             int midY = (homeLoc.y + (h / 2)) / 2;
             
@@ -368,6 +357,10 @@ public class Splasher {
             randY = Math.max(0, Math.min(h - 1, randY));
             
             exploreTarget = new MapLocation(randX, randY);
+            
+            if (!hasEnoughPaint) {
+            } else {
+            }
         }
     }
 
