@@ -1,4 +1,4 @@
-package aggressive;
+package main_bot;
 
 import battlecode.common.*;
 

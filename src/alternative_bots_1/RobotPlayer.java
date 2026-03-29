@@ -1,4 +1,4 @@
-package tower;
+package alternative_bots_1;
 
 import battlecode.common.*;
 
